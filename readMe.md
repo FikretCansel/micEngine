@@ -1,16 +1,17 @@
-# MicEngine(Motor Sesine Göre Ses Çıkartan Uygulama)
+# MicEngine (App that Produces Engine Sounds Based on Microphone Input)
 
-Bu uygulama, mikrofon aracılığıyla alınan ses şiddetine göre, hoparlörden motor sesi duymanızı sağlar. Mikrofonla alınan sesin şiddetine göre telefonun höpörlöründen anlık olarak motor sesi yüksekliği artacaktır, Ses çok artarsa egzoz patlama sesleri vs çesitli efetler gelecektir.
+This app allows you to hear engine sounds through your phone's speaker based on the sound intensity detected by the microphone. As the microphone picks up higher sound levels, the engine sound's volume will increase in real-time. If the sound level increases significantly, additional effects such as exhaust pops and other variations will be triggered.
 
-### Detaylı Açıklama:
-Bu uygulama, Android üzerinde çalışacak şekilde tasarlanmıştır. Temel olarak mikrofon verisini alır ve ses şiddetine göre motor sesinin hızını ve ses seviyesini dinamik olarak ayarlar. Kullanıcılar, ses şiddeti arttıkça motor sesinin daha hızlı ve güçlü çaldığını duyacaklardır(Araba Motor sesi). Aşağıda her özelliğin nasıl çalışacağına dair detaylar verilmiştir:
+### Detailed Description:
 
-2. **Mikrofon Erişimi Sağlama**: Uygulama, mikrofon erişimi izni almak için Android manifest dosyasına gerekli izinleri ekleyecek ve çalışırken kullanıcıdan izin alacaktır.
-3. **Mikrofon Verisini Alma**: `AudioRecord` sınıfı kullanılarak mikrofon verisi alınacak ve bu veriler her 100ms’de bir örneklenecektir.
-4. **Ses Şiddetini Hesaplama (RMS)**: Mikrofon verisinden ses şiddeti hesaplanacak ve bu veri, motor sesinin hızını ve ses seviyesini değiştirmek için kullanılacaktır.
-5. **Motor Sesini Oynatma**: `MediaPlayer` sınıfı, motor sesinin oynatılmasını sağlayacaktır.
-6. **Sesin Hızını ve Volume'unu Dinamik Olarak Ayarlama**: Mikrofon verisinden alınan RMS değeri ile motor sesinin hızını ve ses seviyesini dinamik olarak ayarlayan fonksiyonlar yazılacaktır.
-7. **Ses Geçişlerini Yumuşatma**: Sesin aniden değişmemesi için geçişler yumuşatılacak ve `Handler` sınıfı ile geçişler kontrol edilecektir.
-8. **UI Tasarımı ve Göstergeler**: Kullanıcıya sesin şiddetini görsel olarak gösteren bir UI öğesi (örneğin progress bar) eklenip, ses seviyesinin arttıkça UI da dinamik olarak değişecektir.
+This app is designed to work on Android devices. It primarily captures microphone data and dynamically adjusts the engine sound's speed and volume based on the sound intensity. As the sound intensity increases, users will hear the engine sound become faster and louder (Car Engine Sound). Below are the details of how each feature will work:
 
-Proje Android platformunda çalışacak ve kullanıcıya gerçek zamanlı motor sesi deneyimi sunacaktır.
+1. **Microphone Access**: The app will request microphone access permission by adding the necessary permissions to the Android manifest file and will request permission from the user while the app is running.
+2. **Capturing Microphone Data**: The app will use the `AudioRecord` class to capture microphone data, and this data will be sampled every 100ms.
+3. **Calculating Sound Intensity (RMS)**: The app will calculate the sound intensity from the microphone data, which will be used to adjust the engine sound's speed and volume.
+4. **Playing Engine Sounds**: The app will use the `MediaPlayer` class to play the engine sounds.
+5. **Dynamically Adjusting Speed and Volume**: Functions will be written to dynamically adjust the engine sound's speed and volume based on the RMS value of the microphone data.
+6. **Smoothing Sound Transitions**: To avoid sudden jumps in sound, transitions will be smoothed, and the `Handler` class will be used to control these transitions.
+7. **UI Design and Indicators**: A UI element (such as a progress bar) will be added to visually indicate the sound intensity, dynamically changing as the sound level increases.
+
+The project will run on the Android platform, providing the user with a real-time engine sound experience.
