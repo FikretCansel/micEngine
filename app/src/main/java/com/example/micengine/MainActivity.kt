@@ -18,6 +18,7 @@ import androidx.core.app.ActivityCompat
 import androidx.core.content.ContextCompat
 import com.example.micengine.databinding.ActivityMainBinding
 import kotlin.math.sqrt
+import kotlin.math.pow
 
 class MainActivity : AppCompatActivity() {
     private var _binding: ActivityMainBinding? = null
@@ -26,6 +27,7 @@ class MainActivity : AppCompatActivity() {
     private var audioRecord: AudioRecord? = null
     private var soundPool: SoundPool? = null
     private var isRecording = false
+    private var isSoundLoaded = false
     private val handler = Handler(Looper.getMainLooper())
 
     // Motor sesi ID'si ve stream ID'si
@@ -33,10 +35,10 @@ class MainActivity : AppCompatActivity() {
     private var currentStreamId = 0
 
     // Motor durumu
-    private var currentVolume = 0.5f
-    private var currentRate = 1.0f
-    private var targetVolume = 0.5f
-    private var targetRate = 1.0f
+    private var currentVolume = MIN_VOLUME
+    private var currentRate = MIN_RATE
+    private var targetVolume = MIN_VOLUME
+    private var targetRate = MIN_RATE
 
     private val bufferSize by lazy {
         AudioRecord.getMinBufferSize(
@@ -50,9 +52,25 @@ class MainActivity : AppCompatActivity() {
         private const val TAG = "MainActivity"
         private const val PERMISSION_REQUEST_CODE = 123
         private const val SAMPLE_RATE = 44100
-        private const val VOLUME_STEP = 0.05f
-        private const val RATE_STEP = 0.05f
+        private const val VOLUME_STEP = 0.02f
+        private const val RATE_STEP = 0.02f
+        
+        // Motor sesi parametreleri
+        private const val MIN_VOLUME = 0.2f
+        private const val MAX_VOLUME = 1.0f
+        private const val MIN_RATE = 0.6f
+        private const val MAX_RATE = 2.5f
+        private const val VOLUME_RANGE = MAX_VOLUME - MIN_VOLUME
+        private const val RATE_RANGE = MAX_RATE - MIN_RATE
+
+        // Mikrofon hassasiyet parametreleri
+        private const val MIC_SENSITIVITY = 2.5f     // Mikrofon hassasiyet çarpanı
+        private const val NOISE_THRESHOLD = 0.05f    // Gürültü eşiği
+        private const val RMS_SMOOTHING = 0.7f       // RMS yumuşatma faktörü (0-1 arası)
     }
+
+    // Son RMS değeri için değişken
+    private var lastRMS = 0.0f
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -76,9 +94,6 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             
-            // SoundPool'u başlat
-            setupSoundPool()
-            
             // UI elemanlarını başlat
             try {
                 initializeUI()
@@ -89,6 +104,9 @@ class MainActivity : AppCompatActivity() {
                 return
             }
             
+            // SoundPool'u başlat
+            setupSoundPool()
+            
             // İzinleri kontrol et
             try {
                 checkPermissions()
@@ -98,7 +116,7 @@ class MainActivity : AppCompatActivity() {
                 showErrorAndFinish("İzinler kontrol edilemedi: ${e.message}")
                 return
             }
-            
+
             // Motor sesi güncelleme döngüsünü başlat
             startEngineLoop()
             
@@ -109,18 +127,74 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun setupSoundPool() {
-        val attributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_GAME)
-            .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-            .build()
+        try {
+            Log.d(TAG, "SoundPool başlatılıyor...")
+            
+            val attributes = AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_GAME)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
+                .build()
 
-        soundPool = SoundPool.Builder()
-            .setMaxStreams(1)
-            .setAudioAttributes(attributes)
-            .build()
+            soundPool = SoundPool.Builder()
+                .setMaxStreams(1)
+                .setAudioAttributes(attributes)
+                .build()
 
-        // Motor sesini yükle
-        engineSoundId = soundPool?.load(this, R.raw.engine_idle, 1) ?: 0
+            soundPool?.setOnLoadCompleteListener { pool, sampleId, status ->
+                Log.d(TAG, "Ses yükleme durumu - SampleId: $sampleId, Status: $status")
+                if (status == 0) {
+                    Log.d(TAG, "Ses başarıyla yüklendi")
+                    isSoundLoaded = true
+                    runOnUiThread {
+                        binding.btnStartStop.isEnabled = true
+                    }
+                } else {
+                    Log.e(TAG, "Ses yüklenemedi!")
+                    runOnUiThread {
+                        showError("Motor sesi yüklenemedi!")
+                    }
+                }
+            }
+
+            engineSoundId = soundPool?.load(this, R.raw.engine_idle, 1) ?: 0
+            Log.d(TAG, "Ses yükleme başlatıldı - engineSoundId: $engineSoundId")
+            
+            if (engineSoundId == 0) {
+                throw Exception("Ses dosyası yüklenemedi")
+            }
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "SoundPool başlatma hatası: ${e.message}")
+            showError("Ses sistemi başlatılamadı: ${e.message}")
+        }
+    }
+
+    private fun startEngineSound() {
+        if (!isSoundLoaded || engineSoundId == 0) {
+            Log.e(TAG, "Ses henüz yüklenmedi!")
+            showError("Motor sesi hazır değil!")
+            return
+        }
+
+        try {
+            // Mevcut sesi durdur
+            if (currentStreamId != 0) {
+                soundPool?.stop(currentStreamId)
+            }
+
+            // Yeni sesi başlat
+            Log.d(TAG, "Motor sesi başlatılıyor - Volume: $currentVolume, Rate: $currentRate")
+            currentStreamId = soundPool?.play(engineSoundId, currentVolume, currentVolume, 1, -1, currentRate) ?: 0
+
+            if (currentStreamId == 0) {
+                throw Exception("Ses başlatılamadı")
+            }
+
+            Log.d(TAG, "Motor sesi başlatıldı - StreamId: $currentStreamId")
+        } catch (e: Exception) {
+            Log.e(TAG, "Ses başlatma hatası: ${e.message}")
+            showError("Motor sesi başlatılamadı: ${e.message}")
+        }
     }
 
     private fun startEngineLoop() {
@@ -135,33 +209,42 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateEngineSound() {
-        // Ses ve hızı hedef değerlere doğru yumuşak bir şekilde güncelle
-        if (currentVolume < targetVolume) {
-            currentVolume = (currentVolume + VOLUME_STEP).coerceAtMost(targetVolume)
-        } else if (currentVolume > targetVolume) {
-            currentVolume = (currentVolume - VOLUME_STEP).coerceAtLeast(targetVolume)
-        }
-
-        if (currentRate < targetRate) {
-            currentRate = (currentRate + RATE_STEP).coerceAtMost(targetRate)
-        } else if (currentRate > targetRate) {
-            currentRate = (currentRate - RATE_STEP).coerceAtLeast(targetRate)
-        }
-
-        // Ses ayarlarını uygula
         if (currentStreamId == 0) {
-            // İlk kez başlatılıyorsa
-            currentStreamId = soundPool?.play(engineSoundId, currentVolume, currentVolume, 1, -1, currentRate) ?: 0
-        } else {
-            // Devam eden sesi güncelle
+            startEngineSound()
+            return
+        }
+
+        try {
+            // Ses ve hızı hedef değerlere doğru yumuşak bir şekilde güncelle
+            if (currentVolume < targetVolume) {
+                currentVolume = (currentVolume + VOLUME_STEP).coerceAtMost(targetVolume)
+            } else if (currentVolume > targetVolume) {
+                currentVolume = (currentVolume - VOLUME_STEP).coerceAtLeast(targetVolume)
+            }
+
+            if (currentRate < targetRate) {
+                currentRate = (currentRate + RATE_STEP).coerceAtMost(targetRate)
+            } else if (currentRate > targetRate) {
+                currentRate = (currentRate - RATE_STEP).coerceAtLeast(targetRate)
+            }
+
+            // Ses ayarlarını uygula
             soundPool?.apply {
                 setVolume(currentStreamId, currentVolume, currentVolume)
                 setRate(currentStreamId, currentRate)
             }
-        }
 
-        // UI güncelle
-        binding.soundLevelBar.progress = ((currentVolume + currentRate) * 50).toInt()
+            // UI güncelle - mikrofon seviyesini normalize et
+            val normalizedLevel = ((currentVolume - MIN_VOLUME) / VOLUME_RANGE * 100).toInt()
+            binding.soundLevelBar.progress = normalizedLevel.coerceIn(0, 100)
+            
+            // Debug log
+            Log.d(TAG, "Ses güncellendi - Volume: $currentVolume, Rate: $currentRate, Level: $normalizedLevel")
+            
+        } catch (e: Exception) {
+            Log.e(TAG, "Ses güncelleme hatası: ${e.message}")
+            currentStreamId = 0 // Bir sonraki güncellemede yeniden başlatılacak
+        }
     }
 
     private fun initializeUI() {
@@ -181,6 +264,19 @@ class MainActivity : AppCompatActivity() {
 
     private fun startRecording() {
         try {
+            if (!isSoundLoaded) {
+                Log.e(TAG, "Ses henüz yüklenmedi!")
+                showError("Motor sesi hazır değil!")
+                return
+            }
+
+            // Başlangıç değerlerini sıfırla
+            lastRMS = 0.0f
+            currentVolume = MIN_VOLUME
+            currentRate = MIN_RATE
+            targetVolume = MIN_VOLUME
+            targetRate = MIN_RATE
+
             if (audioRecord == null) {
                 audioRecord = AudioRecord(
                     MediaRecorder.AudioSource.MIC,
@@ -191,9 +287,13 @@ class MainActivity : AppCompatActivity() {
                 )
             }
 
+            // Motor sesini başlat
+            startEngineSound()
+
             isRecording = true
             binding.btnStartStop.text = getString(R.string.stop)
 
+            // Mikrofon okuma thread'ini başlat
             Thread {
                 try {
                     val buffer = ShortArray(bufferSize)
@@ -206,7 +306,7 @@ class MainActivity : AppCompatActivity() {
                             val rms = calculateRMS(buffer, readSize)
                             updateEngineFromMic(rms)
                         }
-                        Thread.sleep(50)
+                        Thread.sleep(20) // Örnekleme hızını artır
                     }
                 } catch (e: Exception) {
                     Log.e(TAG, "Kayıt thread hatası: ${e.message}")
@@ -231,13 +331,21 @@ class MainActivity : AppCompatActivity() {
             
             try {
                 audioRecord?.stop()
+                
+                // Ses çalmayı durdur
+                if (currentStreamId != 0) {
+                    soundPool?.stop(currentStreamId)
+                    currentStreamId = 0
+                }
             } catch (e: Exception) {
                 Log.e(TAG, "AudioRecord durdurma hatası: ${e.message}")
             }
             
             // Motor sesini rölantiye al
-            targetVolume = 0.3f
-            targetRate = 0.8f
+            targetVolume = MIN_VOLUME
+            targetRate = MIN_RATE
+            currentVolume = MIN_VOLUME
+            currentRate = MIN_RATE
             
         } catch (e: Exception) {
             Log.e(TAG, "stopRecording hatası: ${e.message}")
@@ -258,11 +366,39 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun updateEngineFromMic(rms: Double) {
-        val normalizedRMS = (rms / 32768.0).coerceIn(0.0, 1.0)
-        
-        // Ses şiddetine göre motor sesini ayarla
-        targetVolume = (0.3f + (normalizedRMS * 0.7f)).toFloat().coerceIn(0.3f, 1.0f)
-        targetRate = (0.8f + (normalizedRMS * 1.2f)).toFloat().coerceIn(0.8f, 2.0f)
+        try {
+            // RMS değerini normalize et ve hassasiyet çarpanını uygula
+            var normalizedRMS = (rms / 32768.0 * MIC_SENSITIVITY).coerceIn(0.0, 1.0)
+            
+            // Gürültü eşiğini uygula
+            normalizedRMS = if (normalizedRMS < NOISE_THRESHOLD) {
+                0.0
+            } else {
+                // Gürültü eşiği üzerindeki değerleri yeniden ölçeklendir
+                ((normalizedRMS - NOISE_THRESHOLD) / (1 - NOISE_THRESHOLD)).coerceIn(0.0, 1.0)
+            }
+            
+            // RMS değerini yumuşat
+            val smoothedRMS = (RMS_SMOOTHING * lastRMS + (1 - RMS_SMOOTHING) * normalizedRMS).toFloat()
+            lastRMS = smoothedRMS
+            
+            // Ses şiddetini hesapla (daha hassas tepki için üstel değeri düşürdük)
+            val volumeFactor = Math.pow(smoothedRMS.toDouble(), 1.2).toFloat()
+            
+            // RPM faktörünü hesapla (daha hassas RPM artışı için üstel değeri düşürdük)
+            val rpmFactor = Math.pow(smoothedRMS.toDouble(), 1.3).toFloat()
+            
+            // Hedef ses seviyesini ayarla
+            targetVolume = (MIN_VOLUME + (volumeFactor * VOLUME_RANGE)).coerceIn(MIN_VOLUME, MAX_VOLUME)
+            
+            // Hedef RPM'i (playback rate) ayarla
+            targetRate = (MIN_RATE + (rpmFactor * RATE_RANGE)).coerceIn(MIN_RATE, MAX_RATE)
+            
+            // Debug log
+            Log.d(TAG, "RMS: $normalizedRMS, Smoothed: $smoothedRMS, Target Volume: $targetVolume, Target Rate: $targetRate")
+        } catch (e: Exception) {
+            Log.e(TAG, "Mikrofon güncelleme hatası: ${e.message}")
+        }
     }
 
     private fun showError(message: String) {
