@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">MicEngine</string>
+    <string name="start">Başlat</string>
+    <string name="stop">Durdur</string>
+    <string name="sound_level">Ses Seviyesi</string>
+</resources>
